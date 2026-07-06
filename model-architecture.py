@@ -66,16 +66,7 @@ class MultiHeadAttention(nn.Module):
 
 
 def feed_forward(input_dim: int, intermediate_dim: int = 2048) -> nn.Sequential:
-    """
-    创建一个前馈神经网络模块
-    
-    Args:
-        input_dim (int): 输入维度
-        intermediate_dim (int): 隐藏层维度
-    
-    Returns:
-        nn.Sequential: 前馈神经网络模块
-    """
+
     return nn.Sequential(
         nn.Linear(input_dim, intermediate_dim),
         nn.ReLU(),
@@ -115,5 +106,48 @@ def position_encoding(seq_len: int, d_model: int) -> Tensor:
 
     pos_encoding = angle_rads[np.newaxis, ...]
     return torch.tensor(pos_encoding, dtype=torch.float32)
+
+
+class TransformerEncoderLayer(nn.Module):
+    """
+    Transformer编码器层
+    """
+    def __init__(self, model_dim: int, heads_count: int, feed_forward_dim: int, dropout_rate: float = 0.1):
+        super().__init__()
+        query_dim = key_dim = max(model_dim // heads_count, 1)  # Ensure at least dimension of 1 for query and key
+        self.multi_head_attention = Residual(
+            MultiHeadAttention(model_dim, heads_count, query_dim, key_dim),
+            model_dim,
+            dropout_rate=dropout_rate
+        )
+
+        self.feedforward_network = Residual(
+            feed_forward(model_dim, feed_forward_dim),
+            model_dim, 
+            dropout_rate=dropout_rate
+        )
+
+
+    def forward(self, src: Tensor, mask: Tensor = None) -> Tensor:
+        src = self.multi_head_attention(src, src, src, mask)
+        return self.feedforward_network(src)
+
+
+class TransformerEncoder(nn.Module):
+    """
+    Transformer编码器
+    """
+    def __init__(self, layer_count: int = 6, model_dim: int = 512, heads_count: int = 6, feed_forward_dim: int = 2048, dropout_rate: float = 0.1):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            TransformerEncoderLayer(model_dim, heads_count, feed_forward_dim, dropout_rate)
+            for _ in range(layer_count)
+        ])
+
+    def forward(self, src: Tensor, mask: Tensor = None) -> Tensor:
+        seq_legth, dimension = src.size(1), src.size(2)
+        src += position_encoding(seq_legth, dimension)  # Add positional encoding
+        for layer in self.layers:
+            src = layer(src, mask)
+        return src
         
-    

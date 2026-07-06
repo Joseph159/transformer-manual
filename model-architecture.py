@@ -151,3 +151,50 @@ class TransformerEncoder(nn.Module):
             src = layer(src, mask)
         return src
         
+
+class TransformerDecoderLayer(nn.Module):
+    """
+    Transformer解码器层
+    """
+    def __init__(self, model_dim: int, heads_count: int, feed_forward_dim: int, dropout_rate: float = 0.1):
+        super().__init__()
+        query_dim = key_dim = max(model_dim // heads_count, 1)  # Ensure at least dimension of 1 for query and key
+        self.self_attention = Residual(
+            MultiHeadAttention(model_dim, heads_count, query_dim, key_dim),
+            model_dim,
+            dropout_rate=dropout_rate
+        )
+        self.cross_attention = Residual(
+            MultiHeadAttention(model_dim, heads_count, query_dim, key_dim),
+            model_dim,
+            dropout_rate=dropout_rate
+        )
+        self.feedforward_network = Residual(
+            feed_forward(model_dim, feed_forward_dim),
+            model_dim,
+            dropout_rate=dropout_rate
+        )
+
+    def forward(self, tgt: Tensor, memory: Tensor) -> Tensor:
+        tgt = self.self_attention(tgt, tgt, tgt)
+        tgt = self.cross_attention(tgt, memory, memory)
+        return self.feedforward_network(tgt)
+
+class TransformerDecoder(nn.Module):
+    """
+    Transformer解码器
+    """
+    def __init__(self, layer_count: int = 6, model_dim: int = 512, heads_count: int = 6, feed_forward_dim: int = 2048, dropout_rate: float = 0.1):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            TransformerDecoderLayer(model_dim, heads_count, feed_forward_dim, dropout_rate)
+            for _ in range(layer_count)
+        ])
+        self.final_linear = nn.Linear(model_dim, model_dim)  # Final linear layer to project to output dimension
+
+    def forward(self, tgt: Tensor, memory: Tensor) -> Tensor:
+        seq_legth, dimension = tgt.size(1), tgt.size(2)
+        tgt += position_encoding(seq_legth, dimension)  # Add positional encoding
+        for layer in self.layers:
+            tgt = layer(tgt, memory)
+        return torch.softmax(self.final_linear(tgt), dim=-1)  # Apply softmax to the final output

@@ -97,3 +97,23 @@ class Residual(nn.Module):
 
     def forward(self, x: Tensor, *args, **kwargs) -> Tensor:
         return self.norm(x + self.dropout(self.sublayer(x, *args, **kwargs)))
+
+
+def position_encoding(seq_len: int, d_model: int) -> Tensor:
+    """
+    生成位置编码
+    """
+    def get_angles(pos, i, d_model):
+        angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model))
+        return pos * angle_rates
+    
+    angle_rads = get_angles(np.arange(seq_len)[:, np.newaxis],
+                                np.arange(d_model)[np.newaxis, :],
+                                d_model)    
+    angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2])  # 偶数索引使用sin
+    angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2])  # 奇数索引使用cos
+
+    pos_encoding = angle_rads[np.newaxis, ...]
+    return torch.tensor(pos_encoding, dtype=torch.float32)
+        
+    

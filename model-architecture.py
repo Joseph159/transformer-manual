@@ -63,3 +63,37 @@ class MultiHeadAttention(nn.Module):
         head_outputs = [head(query, key, value, mask) for head in self.heads]
         concatenated = torch.cat(head_outputs, dim=-1)
         return self.linear_out(concatenated)
+
+
+def feed_forward(input_dim: int, intermediate_dim: int = 2048) -> nn.Sequential:
+    """
+    创建一个前馈神经网络模块
+    
+    Args:
+        input_dim (int): 输入维度
+        intermediate_dim (int): 隐藏层维度
+    
+    Returns:
+        nn.Sequential: 前馈神经网络模块
+    """
+    return nn.Sequential(
+        nn.Linear(input_dim, intermediate_dim),
+        nn.ReLU(),
+        nn.Linear(intermediate_dim, input_dim)
+    )
+
+class Residual(nn.Module):
+    """
+    残差连接模块
+    """
+    def __init__(self, sublayer: nn.Module, dimension: int, dropout_rate: float = 0.1):
+        super().__init__()
+        self.sublayer = sublayer
+        # 层归一化
+        self.norm = nn.LayerNorm(dimension)
+        # 随机丢弃一部分特征，防止过拟合
+        self.dropout = nn.Dropout(dropout_rate)
+        
+
+    def forward(self, x: Tensor, *args, **kwargs) -> Tensor:
+        return self.norm(x + self.dropout(self.sublayer(x, *args, **kwargs)))
